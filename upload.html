@@ -1,0 +1,83 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Up sách</title>
+<style>
+body{font:16px system-ui,sans-serif;background:#f4f5f7;color:#222;margin:0}
+main{max-width:640px;margin:0 auto;padding:16px}
+section{background:#fff;border-radius:12px;padding:16px;margin:12px 0;box-shadow:0 1px 3px #0002}
+h1{font-size:22px}label{display:block;margin:8px 0;font-size:14px}
+input[type=text],input[type=password]{width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:8px;font-size:15px}
+button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:16px;cursor:pointer}
+button:disabled{background:#999}
+#drop{border:2px dashed #2563eb;border-radius:12px;padding:28px;text-align:center;cursor:pointer;color:#2563eb}
+.row{border-top:1px solid #eee;padding:10px 0}.row b{font-size:13px;word-break:break-all}
+.row input{margin-top:4px}.bar{height:8px;background:#e5e7eb;border-radius:4px;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:#16a34a;border-radius:4px}
+.st{font-size:13px;margin-top:4px}small,li{color:#555;font-size:13px}#msg{font-weight:600}
+</style></head><body><main>
+<h1>📚 Up sách lên thư viện</h1>
+<section>
+<label>Tài khoản GitHub<input type="text" id="owner"></label>
+<label>Tên repo<input type="text" id="repo"></label>
+<label>Mã truy cập (token)<input type="password" id="token" placeholder="github_pat_..."></label>
+<button id="save">Lưu thông tin</button>
+<details><summary><small>Cách lấy mã truy cập (làm 1 lần)</small></summary><ol>
+<li>GitHub → bấm ảnh đại diện → Settings → cuối menu trái chọn Developer settings.</li>
+<li>Personal access tokens → Fine-grained tokens → Generate new token.</li>
+<li>Đặt tên tùy ý, chọn thời hạn dài nhất. Repository access: Only select repositories → chọn repo thư viện.</li>
+<li>Permissions → Repository permissions: đặt Contents và Actions đều là Read and write.</li>
+<li>Bấm Generate token, copy mã (bắt đầu bằng github_pat_) và dán vào ô trên.</li></ol>
+<small>Mã này như mật khẩu: chỉ lưu trong trình duyệt này, đừng gửi cho ai.</small></details>
+</section>
+<section>
+<div id="drop">Bấm để chọn sách hoặc kéo thả vào đây<br><small>epub, pdf, txt, md, fb2 (mỗi file dưới 2 GB)</small></div>
+<input type="file" id="file" multiple hidden accept=".epub,.pdf,.txt,.md,.fb2,.xtc,.xtch">
+<div id="list"></div><p><button id="go" disabled>Tải lên</button></p><p id="msg"></p>
+</section></main>
+<script>
+const $=s=>document.querySelector(s);
+const MIME={'.epub':'application/epub+zip','.pdf':'application/pdf','.txt':'text/plain','.md':'text/markdown','.fb2':'application/x-fictionbook+xml','.xtc':'application/octet-stream','.xtch':'application/octet-stream'};
+const ext=n=>(n.match(/\.[^.]+$/)||[''])[0].toLowerCase();
+const slug=s=>s.replace(/đ/g,'d').replace(/Đ/g,'D').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+const ls=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
+const ss=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const parts=location.pathname.split('/').filter(Boolean);
+$('#owner').value=ls('owner')||(location.hostname.endsWith('.github.io')?location.hostname.split('.')[0]:'');
+$('#repo').value=ls('repo')||(parts[0]&&!parts[0].includes('.')?parts[0]:'');
+$('#token').value=ls('token');
+$('#save').onclick=()=>{['owner','repo','token'].forEach(k=>ss(k,$('#'+k).value.trim()));msg('Đã lưu.')};
+const msg=t=>$('#msg').textContent=t;
+let items=[];
+function add(fl){for(const f of fl){if(!MIME[ext(f.name)])continue;items.push({f,title:f.name.replace(/\.[^.]+$/,'').replace(/[_.]+/g,' '),author:''})}render()}
+function render(){const L=$('#list');L.innerHTML='';items.forEach((it,i)=>{const d=document.createElement('div');d.className='row';
+d.innerHTML='<b></b><input type="text" placeholder="Tên sách"><input type="text" placeholder="Tác giả (không bắt buộc)"><div class="bar"><i></i></div><div class="st"></div>';
+d.querySelector('b').textContent=it.f.name+' ('+(it.f.size/1048576).toFixed(1)+' MB)';
+const [a,b]=d.querySelectorAll('input');a.value=it.title;b.value=it.author;a.oninput=()=>it.title=a.value;b.oninput=()=>it.author=b.value;
+it.bar=d.querySelector('i');it.st=d.querySelector('.st');L.appendChild(d)});$('#go').disabled=!items.length}
+$('#drop').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{add(e.target.files);e.target.value=''};
+$('#drop').ondragover=e=>e.preventDefault();
+$('#drop').ondrop=e=>{e.preventDefault();add(e.dataTransfer.files)};
+const tk=()=>$('#token').value.trim();
+async function gh(path,opt={}){const r=await fetch('https://api.github.com'+path,{...opt,headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+tk(),'Content-Type':'application/json'}});
+if(!r.ok)throw new Error(r.status+(r.status==401||r.status==403||r.status==404?' (kiểm tra lại tài khoản, tên repo, token và quyền của token)':'')+' '+(await r.text()).slice(0,150));return r.status==204?null:r.json()}
+function send(url,it,name){return new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST',url+'?name='+encodeURIComponent(name));
+x.setRequestHeader('Authorization','Bearer '+tk());x.setRequestHeader('Accept','application/vnd.github+json');x.setRequestHeader('Content-Type',MIME[ext(it.f.name)]);
+x.upload.onprogress=e=>{if(e.lengthComputable){const p=e.loaded/e.total*100;it.bar.style.width=p+'%';it.st.textContent='Đang tải '+p.toFixed(0)+'%'}};
+x.onload=()=>x.status==201?ok():no(new Error(x.status==422?'Trùng tên với file đã có':'Lỗi '+x.status));
+x.onerror=()=>no(new Error('Mất kết nối hoặc bị chặn'));x.send(it.f)})}
+$('#go').onclick=async()=>{const o=$('#owner').value.trim(),r=$('#repo').value.trim();
+if(!o||!r||!tk())return msg('Hãy điền đủ tài khoản, tên repo và token rồi bấm Lưu.');
+ss('owner',o);ss('repo',r);ss('token',tk());$('#go').disabled=true;msg('Đang tạo đợt tải lên...');
+try{const t=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+const rel=await gh(`/repos/${o}/${r}/releases`,{method:'POST',body:JSON.stringify({tag_name:'sach-'+t,name:'Sách '+t,draft:true})});
+const up=rel.upload_url.replace(/\{.*$/,'');let ok=0;const used=new Set();
+for(const it of items){let n=(slug(it.title)||'sach')+(slug(it.author)?'__'+slug(it.author):'');let name=n+ext(it.f.name),k=2;
+while(used.has(name))name=n+'-'+(k++)+ext(it.f.name);used.add(name);
+try{await send(up,it,name);ok++;it.bar.style.width='100%';it.st.textContent='✅ Xong'}catch(e){it.st.textContent='❌ '+e.message}}
+if(!ok)throw new Error('Không có file nào tải lên được.');
+msg('Đang cập nhật danh mục...');
+await gh(`/repos/${o}/${r}/releases/${rel.id}`,{method:'PATCH',body:JSON.stringify({draft:false})});
+try{await gh(`/repos/${o}/${r}/actions/workflows/build.yml/dispatches`,{method:'POST',body:JSON.stringify({ref:'main'})})}catch(e){}
+msg(`Xong: ${ok}/${items.length} sách. Danh mục sẽ cập nhật sau vài phút.`);items=items.filter(i=>!i.st.textContent.startsWith('✅'));
+}catch(e){msg('Lỗi: '+e.message)}
+$('#go').disabled=!items.length};
+</script></body></html>

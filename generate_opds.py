@@ -120,6 +120,8 @@ def build(assets):
             f"<h1>Thư viện OPDS</h1><p>Địa chỉ nhập vào máy đọc: <code>{base}/opds.xml</code></p>"
             f"<p>Số sách: {len(books)}</p>"
         )
+    if os.path.exists("upload.html"):
+        shutil.copyfile("upload.html", os.path.join(SITE_DIR, "upload.html"))
     print(f"Đã tạo catalog với {len(books)} sách.")
     print(f"Địa chỉ OPDS: {base}/opds.xml")
 
